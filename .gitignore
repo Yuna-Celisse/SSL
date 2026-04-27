@@ -1,0 +1,12 @@
+# Ignore Keil build artifacts under 04. code
+04. code/**/Objects/
+04. code/**/Listings/
+04. code/**/*.axf
+04. code/**/*.bin
+04. code/**/*.hex
+04. code/**/*.map
+04. code/**/*.o
+04. code/**/*.d
+04. code/**/*.crf
+04. code/**/*.dep
+04. code/**/*.lnp
