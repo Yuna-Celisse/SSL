@@ -10,7 +10,9 @@
       <TargetName>SSL-CTLBRD V0.0.1</TargetName>
       <ToolsetNumber>0x4</ToolsetNumber>
       <ToolsetName>ARM-ADS</ToolsetName>
-      <uAC6>0</uAC6>
+      <pArmCC>6220000::V6.22::ARMCLANG</pArmCC>
+      <pCCUsed>6220000::V6.22::ARMCLANG</pCCUsed>
+      <uAC6>1</uAC6>
       <TargetOption>
         <TargetCommonOption>
           <Device>STM32F407ZETx</Device>
@@ -206,7 +208,7 @@
             <Ro2Chk>0</Ro2Chk>
             <Ro3Chk>0</Ro3Chk>
             <Ir1Chk>1</Ir1Chk>
-            <Ir2Chk>1</Ir2Chk>
+            <Ir2Chk>0</Ir2Chk>
             <Ra1Chk>0</Ra1Chk>
             <Ra2Chk>0</Ra2Chk>
             <Ra3Chk>0</Ra3Chk>
@@ -322,13 +324,13 @@
             <PlainCh>0</PlainCh>
             <Ropi>0</Ropi>
             <Rwpi>0</Rwpi>
-            <wLevel>2</wLevel>
+            <wLevel>3</wLevel>
             <uThumb>0</uThumb>
             <uSurpInc>0</uSurpInc>
             <uC99>1</uC99>
             <uGnu>0</uGnu>
             <useXO>0</useXO>
-            <v6Lang>5</v6Lang>
+            <v6Lang>3</v6Lang>
             <v6LangP>3</v6LangP>
             <vShortEn>1</vShortEn>
             <vShortWch>1</vShortWch>
@@ -407,6 +409,31 @@
               <FileName>stm32f4xx_hal_msp.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Core/Src/stm32f4xx_hal_msp.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Application/User/Modules</GroupName>
+          <Files>
+            <File>
+              <FileName>ssl_chassis.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/ssl_chassis.c</FilePath>
+            </File>
+            <File>
+              <FileName>ssl_host_console.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/ssl_host_console.c</FilePath>
+            </File>
+            <File>
+              <FileName>ssl_motor_board.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/ssl_motor_board.c</FilePath>
+            </File>
+            <File>
+              <FileName>ssl_uart.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/ssl_uart.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -500,8 +527,8 @@
   <RTE>
     <apis/>
     <components>
-      <component Cclass="CMSIS" Cgroup="CORE" Cvendor="ARM" Cversion="4.3.0" condition="CMSIS Core">
-        <package name="CMSIS" schemaVersion="1.3" url="http://www.keil.com/pack/" vendor="ARM" version="4.5.0"/>
+      <component Cclass="CMSIS" Cgroup="CORE" Cvendor="ARM" Cversion="6.1.0" condition="ARMv6_7_8-M Device">
+        <package name="CMSIS" schemaVersion="1.7.36" url="https://www.keil.com/pack/" vendor="ARM" version="6.1.0"/>
         <targetInfos>
           <targetInfo name="SSL-CTLBRD V0.0.1"/>
         </targetInfos>

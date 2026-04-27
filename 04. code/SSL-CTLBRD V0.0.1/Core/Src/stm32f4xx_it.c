@@ -20,6 +20,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "stm32f4xx_it.h"
+#include "ssl_chassis.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 /* USER CODE END Includes */
@@ -200,29 +201,34 @@ void SysTick_Handler(void)
 
 /* USER CODE BEGIN 1 */
 
+void USART1_IRQHandler(void)
+{
+  SSL_Chassis_USART1_IRQHandler();
+}
+
 void EXTI0_IRQHandler(void)
 {
-  SSL_EXTI_IRQHandler(GPIO_PIN_0);
+  SSL_Chassis_EXTI_IRQHandler(GPIO_PIN_0);
 }
 
 void EXTI1_IRQHandler(void)
 {
-  SSL_EXTI_IRQHandler(GPIO_PIN_1);
+  SSL_Chassis_EXTI_IRQHandler(GPIO_PIN_1);
 }
 
 void EXTI2_IRQHandler(void)
 {
-  SSL_EXTI_IRQHandler(GPIO_PIN_2);
+  SSL_Chassis_EXTI_IRQHandler(GPIO_PIN_2);
 }
 
 void EXTI3_IRQHandler(void)
 {
-  SSL_EXTI_IRQHandler(GPIO_PIN_3);
+  SSL_Chassis_EXTI_IRQHandler(GPIO_PIN_3);
 }
 
 void TIM6_DAC_IRQHandler(void)
 {
-  SSL_TIM6_IRQHandler();
+  SSL_Chassis_TIM6_IRQHandler();
 }
 
 /* USER CODE END 1 */
