@@ -1,6 +1,7 @@
 #include "ssl_chassis.h"
 
 #include "ssl_host_console.h"
+#include "ssl_mpu6050.h"
 #include "ssl_motor_board.h"
 #include <stdbool.h>
 
@@ -98,6 +99,7 @@ static bool g_raw_override_enabled = false;
 void SSL_Chassis_Init(void)
 {
   SSL_HostConsole_Init(&kHostPort);
+  SSL_Mpu6050_Init();
   SSL_MotorBoard_InitAll(g_motors, SSL_MOTOR_BOARD_COUNT);
   SSL_ConfigurePulseInputs();
   SSL_ConfigureTimer6();
@@ -112,6 +114,7 @@ void SSL_Chassis_Process(void)
 
   if (!SSL_HostConsole_TryReadCommand(&command))
   {
+    SSL_Mpu6050_Process();
     return;
   }
 

@@ -4,6 +4,7 @@
             "name": "SSL-CTLBRD V0.0.1_SSL-CTLBRD V0.0.1",
             "includePath": [
                 "c:\\Users\\YunaCelisse\\Desktop\\Software\\SSL\\04. code\\SSL-CTLBRD V0.0.1\\Core\\Inc",
+                "c:\\Users\\YunaCelisse\\Desktop\\Software\\SSL\\04. code\\SSL-CTLBRD V0.0.1\\Core\\Inc\\mpu6050_vendor",
                 "c:\\Users\\YunaCelisse\\Desktop\\Software\\SSL\\04. code\\SSL-CTLBRD V0.0.1\\Drivers\\STM32F4xx_HAL_Driver\\Inc",
                 "c:\\Users\\YunaCelisse\\Desktop\\Software\\SSL\\04. code\\SSL-CTLBRD V0.0.1\\Drivers\\STM32F4xx_HAL_Driver\\Inc\\Legacy",
                 "c:\\Users\\YunaCelisse\\Desktop\\Software\\SSL\\04. code\\SSL-CTLBRD V0.0.1\\Drivers\\CMSIS\\Device\\ST\\STM32F4xx\\Include",
@@ -14,6 +15,7 @@
                 "C:\\Users\\YunaCelisse\\AppData\\Local\\Keil_v5\\ARM\\ARMCLANG\\include\\libcxx",
                 "c:\\Users\\YunaCelisse\\Desktop\\Software\\SSL\\04. code\\SSL-CTLBRD V0.0.1\\MDK-ARM",
                 "c:\\Users\\YunaCelisse\\Desktop\\Software\\SSL\\04. code\\SSL-CTLBRD V0.0.1\\Core\\Src",
+                "c:\\Users\\YunaCelisse\\Desktop\\Software\\SSL\\04. code\\SSL-CTLBRD V0.0.1\\Core\\Src\\mpu6050_vendor",
                 "c:\\Users\\YunaCelisse\\Desktop\\Software\\SSL\\04. code\\SSL-CTLBRD V0.0.1\\Drivers\\STM32F4xx_HAL_Driver\\Src",
                 "${default}"
             ],
