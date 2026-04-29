@@ -17,7 +17,11 @@ void SSL_HostConsole_WriteLine(const char *text);
 void SSL_HostConsole_ReportStatus(
     const SslVelocityCommand *velocity,
     const int16_t *wheel_rpm,
-    uint32_t wheel_count);
+    uint32_t wheel_count,
+    float yaw_deg,
+    float heading_target_deg,
+    float corrected_wz_radps,
+    bool heading_hold_active);
 void SSL_HostConsole_ReportHelp(void);
 void SSL_HostConsole_ReportAck(const char *message);
 void SSL_HostConsole_ReportError(const char *message);

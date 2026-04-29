@@ -98,12 +98,17 @@ void SSL_HostConsole_WriteLine(const char *text)
 void SSL_HostConsole_ReportStatus(
     const SslVelocityCommand *velocity,
     const int16_t *wheel_rpm,
-    uint32_t wheel_count)
+    uint32_t wheel_count,
+    float yaw_deg,
+    float heading_target_deg,
+    float corrected_wz_radps,
+    bool heading_hold_active)
 {
-  char buffer[160];
+  char buffer[200];
   const int32_t vx_mmps = (int32_t)(velocity->vx_mps * 1000.0f);
   const int32_t vy_mmps = (int32_t)(velocity->vy_mps * 1000.0f);
   const int32_t wz_mradps = (int32_t)(velocity->wz_radps * 1000.0f);
+  const int32_t corrected_wz_mradps = (int32_t)(corrected_wz_radps * 1000.0f);
 
   if (wheel_count < 4U)
   {
@@ -113,10 +118,14 @@ void SSL_HostConsole_ReportStatus(
   (void)snprintf(
       buffer,
       sizeof(buffer),
-      "STAT vx=%ldmm/s vy=%ldmm/s wz=%ldmrad/s rpm=[%d,%d,%d,%d]",
+      "STAT vx=%ldmm/s vy=%ldmm/s wz=%ldmrad/s corrWz=%ldmrad/s yaw=%.1fdeg holdYaw=%.1fdeg hold=%u rpm=[%d,%d,%d,%d]",
       (long)vx_mmps,
       (long)vy_mmps,
       (long)wz_mradps,
+      (long)corrected_wz_mradps,
+      (double)yaw_deg,
+      (double)heading_target_deg,
+      heading_hold_active ? 1U : 0U,
       wheel_rpm[0],
       wheel_rpm[1],
       wheel_rpm[2],

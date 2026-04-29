@@ -16,15 +16,22 @@ static void SSL_ConfigureTimer6(void);
 static void SSL_ChassisControlTick(void);
 static void SSL_Chassis_HandleCommand(const SslControlCommand *command, bool from_esp32);
 static void SSL_StopAllMotors(void);
+static float SSL_ApplyHeadingControl(void);
 static void SSL_UpdateWheelTargetsFromVelocity(void);
 static float SSL_DegreesToRadians(float degrees);
+static float SSL_AbsoluteFloat(float value);
 static float SSL_ClampFloat(float value, float min_value, float max_value);
+static float SSL_NormalizeAngleDeg(float angle_deg);
 static int16_t SSL_RoundToInt16(float value);
 
 static const float kWheelRadiusM = 0.05f;
 static const float kHalfWheelbaseM = 0.12f;
 static const float kHalfTrackM = 0.11f;
 static const float kMaxWheelRpm = 450.0f;
+static const float kHeadingHoldTranslationThresholdMps = 0.05f;
+static const float kHeadingHoldCommandThresholdRadps = 0.08f;
+static const float kHeadingHoldKpRadpsPerDeg = 0.04f;
+static const float kHeadingHoldMaxCorrectionRadps = 1.20f;
 static const float kPi = 3.1415926f;
 static const float kWheelAngleDeg[SSL_MOTOR_BOARD_COUNT] = {45.0f, -45.0f, 135.0f, -135.0f};
 static const int8_t kWheelDirectionSign[SSL_MOTOR_BOARD_COUNT] = {1, 1, 1, 1};
@@ -126,6 +133,10 @@ static volatile uint32_t g_last_command_tick_ms = 0U;
 static volatile uint32_t g_last_status_tick_ms = 0U;
 static volatile uint32_t g_feedback_pulses[SSL_MOTOR_BOARD_COUNT] = {0U};
 static bool g_raw_override_enabled = false;
+static bool g_heading_reference_valid = false;
+static bool g_heading_hold_active = false;
+static float g_heading_target_deg = 0.0f;
+static float g_heading_corrected_wz_radps = 0.0f;
 
 void SSL_Chassis_Init(void)
 {
@@ -229,6 +240,7 @@ static void SSL_ChassisControlTick(void)
 {
   int16_t wheel_rpm[SSL_MOTOR_BOARD_COUNT];
   SslEsp32StatusPayload esp32_status;
+  const SslMpu6050State *mpu_state = SSL_Mpu6050_GetState();
   const uint32_t now_ms = HAL_GetTick();
   uint32_t index = 0U;
 
@@ -253,7 +265,14 @@ static void SSL_ChassisControlTick(void)
       esp32_status.wheel_rpm[index] = wheel_rpm[index];
     }
 
-    SSL_HostConsole_ReportStatus(&g_target_velocity, wheel_rpm, SSL_MOTOR_BOARD_COUNT);
+    SSL_HostConsole_ReportStatus(
+        &g_target_velocity,
+        wheel_rpm,
+        SSL_MOTOR_BOARD_COUNT,
+        mpu_state->yaw,
+        g_heading_target_deg,
+        g_heading_corrected_wz_radps,
+        g_heading_hold_active);
     esp32_status.velocity = g_target_velocity;
     SSL_Esp32Link_SendStatus(&esp32_status);
   }
@@ -302,7 +321,16 @@ static void SSL_Chassis_HandleCommand(const SslControlCommand *command, bool fro
 
     if (!from_esp32)
     {
-      SSL_HostConsole_ReportStatus(&g_target_velocity, wheel_rpm, SSL_MOTOR_BOARD_COUNT);
+      const SslMpu6050State *mpu_state = SSL_Mpu6050_GetState();
+
+      SSL_HostConsole_ReportStatus(
+          &g_target_velocity,
+          wheel_rpm,
+          SSL_MOTOR_BOARD_COUNT,
+          mpu_state->yaw,
+          g_heading_target_deg,
+          g_heading_corrected_wz_radps,
+          g_heading_hold_active);
     }
     else
     {
@@ -363,11 +391,71 @@ static void SSL_Chassis_HandleCommand(const SslControlCommand *command, bool fro
 
 static void SSL_StopAllMotors(void)
 {
+  const SslMpu6050State *mpu_state = SSL_Mpu6050_GetState();
+
   g_target_velocity.vx_mps = 0.0f;
   g_target_velocity.vy_mps = 0.0f;
   g_target_velocity.wz_radps = 0.0f;
+  g_heading_corrected_wz_radps = 0.0f;
+  g_heading_hold_active = false;
+  g_heading_reference_valid = mpu_state->initialized;
+  if (mpu_state->initialized)
+  {
+    g_heading_target_deg = mpu_state->yaw;
+  }
   g_raw_override_enabled = false;
   SSL_MotorBoard_StopAll(g_motors, SSL_MOTOR_BOARD_COUNT);
+}
+
+static float SSL_ApplyHeadingControl(void)
+{
+  const SslMpu6050State *mpu_state = SSL_Mpu6050_GetState();
+  const float translation_speed_mps =
+      sqrtf(
+          (g_target_velocity.vx_mps * g_target_velocity.vx_mps) +
+          (g_target_velocity.vy_mps * g_target_velocity.vy_mps));
+  const float commanded_wz_radps = g_target_velocity.wz_radps;
+  float heading_error_deg = 0.0f;
+
+  g_heading_corrected_wz_radps = commanded_wz_radps;
+
+  if (!mpu_state->initialized)
+  {
+    g_heading_hold_active = false;
+    g_heading_reference_valid = false;
+    return commanded_wz_radps;
+  }
+
+  if (SSL_AbsoluteFloat(commanded_wz_radps) >= kHeadingHoldCommandThresholdRadps)
+  {
+    g_heading_target_deg = mpu_state->yaw;
+    g_heading_reference_valid = true;
+    g_heading_hold_active = false;
+    return commanded_wz_radps;
+  }
+
+  if (translation_speed_mps < kHeadingHoldTranslationThresholdMps)
+  {
+    g_heading_target_deg = mpu_state->yaw;
+    g_heading_reference_valid = true;
+    g_heading_hold_active = false;
+    g_heading_corrected_wz_radps = 0.0f;
+    return 0.0f;
+  }
+
+  if (!g_heading_reference_valid)
+  {
+    g_heading_target_deg = mpu_state->yaw;
+    g_heading_reference_valid = true;
+  }
+
+  heading_error_deg = SSL_NormalizeAngleDeg(g_heading_target_deg - mpu_state->yaw);
+  g_heading_corrected_wz_radps = SSL_ClampFloat(
+      heading_error_deg * kHeadingHoldKpRadpsPerDeg,
+      -kHeadingHoldMaxCorrectionRadps,
+      kHeadingHoldMaxCorrectionRadps);
+  g_heading_hold_active = true;
+  return g_heading_corrected_wz_radps;
 }
 
 static void SSL_UpdateWheelTargetsFromVelocity(void)
@@ -376,7 +464,7 @@ static void SSL_UpdateWheelTargetsFromVelocity(void)
   const float wheel_rpm_per_mps = 60.0f / (2.0f * kPi * kWheelRadiusM);
   const float vx = g_target_velocity.vx_mps;
   const float vy = g_target_velocity.vy_mps;
-  const float wz = g_target_velocity.wz_radps;
+  const float wz = SSL_ApplyHeadingControl();
   float wheel_linear_mps[SSL_MOTOR_BOARD_COUNT];
   float max_abs_wheel_rpm = 0.0f;
   uint32_t index = 0U;
@@ -427,6 +515,11 @@ static float SSL_DegreesToRadians(float degrees)
   return degrees * (kPi / 180.0f);
 }
 
+static float SSL_AbsoluteFloat(float value)
+{
+  return (value >= 0.0f) ? value : -value;
+}
+
 static float SSL_ClampFloat(float value, float min_value, float max_value)
 {
   if (value < min_value)
@@ -440,6 +533,21 @@ static float SSL_ClampFloat(float value, float min_value, float max_value)
   }
 
   return value;
+}
+
+static float SSL_NormalizeAngleDeg(float angle_deg)
+{
+  while (angle_deg > 180.0f)
+  {
+    angle_deg -= 360.0f;
+  }
+
+  while (angle_deg < -180.0f)
+  {
+    angle_deg += 360.0f;
+  }
+
+  return angle_deg;
 }
 
 static int16_t SSL_RoundToInt16(float value)
