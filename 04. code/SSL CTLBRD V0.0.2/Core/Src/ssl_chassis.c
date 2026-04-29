@@ -20,6 +20,7 @@ static const float kWheelRadiusM = 0.05f;
 static const float kHalfWheelbaseM = 0.12f;
 static const float kHalfTrackM = 0.11f;
 static const float kMaxWheelRpm = 450.0f;
+static const float kSqrt2Inv = 0.70710678f;
 static const int8_t kWheelDirectionSign[SSL_MOTOR_BOARD_COUNT] = {1, 1, 1, 1};
 static const SslUartPort kHostPort = {
     .instance = USART1,
@@ -281,21 +282,44 @@ static void SSL_UpdateWheelTargetsFromVelocity(void)
   const float vy = g_target_velocity.vy_mps;
   const float wz = g_target_velocity.wz_radps;
   float wheel_linear_mps[SSL_MOTOR_BOARD_COUNT];
+  float max_abs_wheel_rpm = 0.0f;
   uint32_t index = 0U;
 
-  wheel_linear_mps[0] = vx - vy - (wz * rotation_arm);
-  wheel_linear_mps[1] = vx + vy + (wz * rotation_arm);
-  wheel_linear_mps[2] = vx + vy - (wz * rotation_arm);
-  wheel_linear_mps[3] = vx - vy + (wz * rotation_arm);
+  /* Four omni-wheel layout:
+   * front_left  =  45 deg
+   * rear_left   = 135 deg
+   * rear_right  = -135 deg
+   * front_right = -45 deg
+   */
+  wheel_linear_mps[0] = (kSqrt2Inv * (vx + vy)) + (wz * rotation_arm);
+  wheel_linear_mps[1] = (kSqrt2Inv * (vx - vy)) + (wz * rotation_arm);
+  wheel_linear_mps[2] = (kSqrt2Inv * (-vx + vy)) + (wz * rotation_arm);
+  wheel_linear_mps[3] = (kSqrt2Inv * (-vx - vy)) + (wz * rotation_arm);
 
   for (index = 0U; index < SSL_MOTOR_BOARD_COUNT; ++index)
   {
-    const float wheel_rpm = SSL_ClampFloat(
-        wheel_linear_mps[index] * wheel_rpm_per_mps * (float)kWheelDirectionSign[index],
-        -kMaxWheelRpm,
-        kMaxWheelRpm);
+    const float wheel_rpm = wheel_linear_mps[index] * wheel_rpm_per_mps;
+    const float abs_wheel_rpm = (wheel_rpm >= 0.0f) ? wheel_rpm : -wheel_rpm;
 
-    g_motors[index].target_rpm = SSL_RoundToInt16(wheel_rpm);
+    if (abs_wheel_rpm > max_abs_wheel_rpm)
+    {
+      max_abs_wheel_rpm = abs_wheel_rpm;
+    }
+  }
+
+  for (index = 0U; index < SSL_MOTOR_BOARD_COUNT; ++index)
+  {
+    float wheel_rpm = wheel_linear_mps[index] * wheel_rpm_per_mps;
+
+    if (max_abs_wheel_rpm > kMaxWheelRpm)
+    {
+      wheel_rpm *= (kMaxWheelRpm / max_abs_wheel_rpm);
+    }
+
+    wheel_rpm *= (float)kWheelDirectionSign[index];
+
+    g_motors[index].target_rpm = SSL_RoundToInt16(
+        SSL_ClampFloat(wheel_rpm, -kMaxWheelRpm, kMaxWheelRpm));
   }
 }
 
