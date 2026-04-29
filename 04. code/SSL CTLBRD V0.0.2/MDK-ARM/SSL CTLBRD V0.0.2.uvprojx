@@ -421,6 +421,16 @@
               <FilePath>../Core/Src/ssl_chassis.c</FilePath>
             </File>
             <File>
+              <FileName>ssl_esp32_link.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/ssl_esp32_link.c</FilePath>
+            </File>
+            <File>
+              <FileName>ssl_esp32_protocol.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/ssl_esp32_protocol.c</FilePath>
+            </File>
+            <File>
               <FileName>ssl_host_console.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Core/Src/ssl_host_console.c</FilePath>

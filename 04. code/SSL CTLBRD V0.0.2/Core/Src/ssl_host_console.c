@@ -13,7 +13,7 @@ static volatile uint8_t g_command_length = 0U;
 static volatile bool g_command_ready = false;
 
 static void SSL_HostConsole_CopyReadyCommand(char *line_buffer, size_t line_buffer_size);
-static void SSL_HostConsole_ProcessLine(const char *line, SslHostCommand *command);
+static void SSL_HostConsole_ProcessLine(const char *line, SslControlCommand *command);
 static void SSL_HostConsole_TrimLine(char *line);
 
 void SSL_HostConsole_Init(const SslUartPort *port)
@@ -25,7 +25,7 @@ void SSL_HostConsole_Init(const SslUartPort *port)
   SSL_Uart_Init(port, true);
 }
 
-bool SSL_HostConsole_TryReadCommand(SslHostCommand *command)
+bool SSL_HostConsole_TryReadCommand(SslControlCommand *command)
 {
   char line[SSL_MAX_COMMAND_LINE];
 
@@ -96,7 +96,7 @@ void SSL_HostConsole_WriteLine(const char *text)
 }
 
 void SSL_HostConsole_ReportStatus(
-    const SslHostVelocityCommand *velocity,
+    const SslVelocityCommand *velocity,
     const int16_t *wheel_rpm,
     uint32_t wheel_count)
 {
@@ -158,7 +158,7 @@ static void SSL_HostConsole_CopyReadyCommand(char *line_buffer, size_t line_buff
   SSL_HostConsole_TrimLine(line_buffer);
 }
 
-static void SSL_HostConsole_ProcessLine(const char *line, SslHostCommand *command)
+static void SSL_HostConsole_ProcessLine(const char *line, SslControlCommand *command)
 {
   command->has_command = true;
 

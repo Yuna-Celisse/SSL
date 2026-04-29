@@ -1,5 +1,7 @@
 #include "ssl_chassis.h"
 
+#include "ssl_control_command.h"
+#include "ssl_esp32_link.h"
 #include "ssl_host_console.h"
 #include "ssl_mpu6050.h"
 #include "ssl_motor_board.h"
@@ -12,6 +14,7 @@
 static void SSL_ConfigurePulseInputs(void);
 static void SSL_ConfigureTimer6(void);
 static void SSL_ChassisControlTick(void);
+static void SSL_Chassis_HandleCommand(const SslControlCommand *command, bool from_esp32);
 static void SSL_StopAllMotors(void);
 static void SSL_UpdateWheelTargetsFromVelocity(void);
 static float SSL_DegreesToRadians(float degrees);
@@ -25,6 +28,30 @@ static const float kMaxWheelRpm = 450.0f;
 static const float kPi = 3.1415926f;
 static const float kWheelAngleDeg[SSL_MOTOR_BOARD_COUNT] = {45.0f, -45.0f, 135.0f, -135.0f};
 static const int8_t kWheelDirectionSign[SSL_MOTOR_BOARD_COUNT] = {1, 1, 1, 1};
+static const SslEsp32LinkConfig kEsp32LinkConfig = {
+    .uart_port =
+        {
+            .instance = USART6,
+            .tx_port = GPIOC,
+            .tx_pin = GPIO_PIN_6,
+            .rx_port = GPIOC,
+            .rx_pin = GPIO_PIN_7,
+            .gpio_af = GPIO_AF8_USART6,
+            .baudrate = 921600U,
+        },
+    .enable_pin =
+        {
+            .port = GPIOB,
+            .pin = GPIO_PIN_0,
+            .active_high = true,
+        },
+    .boot_pin =
+        {
+            .port = GPIOB,
+            .pin = GPIO_PIN_1,
+            .active_high = true,
+        },
+};
 static const SslUartPort kHostPort = {
     .instance = USART1,
     .tx_port = GPIOA,
@@ -94,7 +121,7 @@ static SslMotorBoard g_motors[SSL_MOTOR_BOARD_COUNT] = {
     },
 };
 
-static SslHostVelocityCommand g_target_velocity = {0.0f, 0.0f, 0.0f};
+static SslVelocityCommand g_target_velocity = {0.0f, 0.0f, 0.0f};
 static volatile uint32_t g_last_command_tick_ms = 0U;
 static volatile uint32_t g_last_status_tick_ms = 0U;
 static volatile uint32_t g_feedback_pulses[SSL_MOTOR_BOARD_COUNT] = {0U};
@@ -103,6 +130,7 @@ static bool g_raw_override_enabled = false;
 void SSL_Chassis_Init(void)
 {
   SSL_HostConsole_Init(&kHostPort);
+  SSL_Esp32Link_Init(&kEsp32LinkConfig);
   SSL_Mpu6050_Init();
   SSL_MotorBoard_InitAll(g_motors, SSL_MOTOR_BOARD_COUNT);
   SSL_ConfigurePulseInputs();
@@ -114,62 +142,21 @@ void SSL_Chassis_Init(void)
 
 void SSL_Chassis_Process(void)
 {
-  SslHostCommand command;
+  SslControlCommand command;
 
-  if (!SSL_HostConsole_TryReadCommand(&command))
+  if (SSL_HostConsole_TryReadCommand(&command))
   {
-    SSL_Mpu6050_Process();
+    SSL_Chassis_HandleCommand(&command, false);
     return;
   }
 
-  if (command.help_requested)
+  if (SSL_Esp32Link_TryReadCommand(&command))
   {
-    SSL_HostConsole_ReportHelp();
+    SSL_Chassis_HandleCommand(&command, true);
     return;
   }
 
-  if (command.status_requested)
-  {
-    int16_t wheel_rpm[SSL_MOTOR_BOARD_COUNT];
-    uint32_t index = 0U;
-
-    for (index = 0U; index < SSL_MOTOR_BOARD_COUNT; ++index)
-    {
-      wheel_rpm[index] = g_motors[index].target_rpm;
-    }
-
-    SSL_HostConsole_ReportStatus(&g_target_velocity, wheel_rpm, SSL_MOTOR_BOARD_COUNT);
-    return;
-  }
-
-  if (command.stop_requested)
-  {
-    SSL_StopAllMotors();
-    g_last_command_tick_ms = HAL_GetTick();
-    SSL_HostConsole_ReportAck("OK STOP");
-    return;
-  }
-
-  if (command.raw_mode)
-  {
-    uint32_t index = 0U;
-
-    for (index = 0U; index < SSL_MOTOR_BOARD_COUNT; ++index)
-    {
-      g_motors[index].target_rpm = SSL_RoundToInt16(
-          SSL_ClampFloat((float)command.raw_rpm[index], -kMaxWheelRpm, kMaxWheelRpm));
-    }
-
-    g_raw_override_enabled = true;
-    g_last_command_tick_ms = HAL_GetTick();
-    SSL_HostConsole_ReportAck("OK RAW");
-    return;
-  }
-
-  g_target_velocity = command.velocity;
-  g_raw_override_enabled = false;
-  g_last_command_tick_ms = HAL_GetTick();
-  SSL_HostConsole_ReportAck("OK VEL");
+  SSL_Mpu6050_Process();
 }
 
 void SSL_Chassis_USART1_IRQHandler(void)
@@ -241,6 +228,7 @@ static void SSL_ConfigureTimer6(void)
 static void SSL_ChassisControlTick(void)
 {
   int16_t wheel_rpm[SSL_MOTOR_BOARD_COUNT];
+  SslEsp32StatusPayload esp32_status;
   const uint32_t now_ms = HAL_GetTick();
   uint32_t index = 0U;
 
@@ -262,9 +250,114 @@ static void SSL_ChassisControlTick(void)
     for (index = 0U; index < SSL_MOTOR_BOARD_COUNT; ++index)
     {
       wheel_rpm[index] = g_motors[index].target_rpm;
+      esp32_status.wheel_rpm[index] = wheel_rpm[index];
     }
 
     SSL_HostConsole_ReportStatus(&g_target_velocity, wheel_rpm, SSL_MOTOR_BOARD_COUNT);
+    esp32_status.velocity = g_target_velocity;
+    SSL_Esp32Link_SendStatus(&esp32_status);
+  }
+}
+
+static void SSL_Chassis_HandleCommand(const SslControlCommand *command, bool from_esp32)
+{
+  int16_t wheel_rpm[SSL_MOTOR_BOARD_COUNT];
+  uint32_t index = 0U;
+
+  if (command->help_requested)
+  {
+    if (!from_esp32)
+    {
+      SSL_HostConsole_ReportHelp();
+    }
+    else
+    {
+      SSL_Esp32Link_SendError(0x11U);
+    }
+    return;
+  }
+
+  if (command->ping_requested)
+  {
+    if (!from_esp32)
+    {
+      SSL_HostConsole_ReportAck("OK PING");
+    }
+    else
+    {
+      SSL_Esp32Link_SendAck();
+    }
+    return;
+  }
+
+  if (command->status_requested)
+  {
+    SslEsp32StatusPayload esp32_status;
+
+    for (index = 0U; index < SSL_MOTOR_BOARD_COUNT; ++index)
+    {
+      wheel_rpm[index] = g_motors[index].target_rpm;
+      esp32_status.wheel_rpm[index] = wheel_rpm[index];
+    }
+
+    if (!from_esp32)
+    {
+      SSL_HostConsole_ReportStatus(&g_target_velocity, wheel_rpm, SSL_MOTOR_BOARD_COUNT);
+    }
+    else
+    {
+      esp32_status.velocity = g_target_velocity;
+      SSL_Esp32Link_SendStatus(&esp32_status);
+    }
+    return;
+  }
+
+  if (command->stop_requested)
+  {
+    SSL_StopAllMotors();
+    g_last_command_tick_ms = HAL_GetTick();
+    if (!from_esp32)
+    {
+      SSL_HostConsole_ReportAck("OK STOP");
+    }
+    else
+    {
+      SSL_Esp32Link_SendAck();
+    }
+    return;
+  }
+
+  if (command->raw_mode)
+  {
+    for (index = 0U; index < SSL_MOTOR_BOARD_COUNT; ++index)
+    {
+      g_motors[index].target_rpm = SSL_RoundToInt16(
+          SSL_ClampFloat((float)command->raw_rpm[index], -kMaxWheelRpm, kMaxWheelRpm));
+    }
+
+    g_raw_override_enabled = true;
+    g_last_command_tick_ms = HAL_GetTick();
+    if (!from_esp32)
+    {
+      SSL_HostConsole_ReportAck("OK RAW");
+    }
+    else
+    {
+      SSL_Esp32Link_SendAck();
+    }
+    return;
+  }
+
+  g_target_velocity = command->velocity;
+  g_raw_override_enabled = false;
+  g_last_command_tick_ms = HAL_GetTick();
+  if (!from_esp32)
+  {
+    SSL_HostConsole_ReportAck("OK VEL");
+  }
+  else
+  {
+    SSL_Esp32Link_SendAck();
   }
 }
 
