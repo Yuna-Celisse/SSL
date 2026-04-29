@@ -5,11 +5,12 @@ Desktop upper-computer tool for the SSL chassis Wi-Fi link.
 ## Runtime
 
 - Python 3.10+
-- Standard library only
+- `PySide6`
 
 ## Start
 
 ```powershell
+pip install PySide6
 python .\main.py
 ```
 
@@ -21,6 +22,8 @@ python .\main.py
 - Send `STOP`
 - Request `STATUS`
 - Send `PING`
+- Keyboard control with `W/A/S/D` and left/right arrows
+- Custom linear/angular step values for keyboard speed-up
 - Display binary status feedback from STM32
 
 ## Default network
