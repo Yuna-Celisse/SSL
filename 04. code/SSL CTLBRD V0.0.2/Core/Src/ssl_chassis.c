@@ -3,6 +3,7 @@
 #include "ssl_host_console.h"
 #include "ssl_mpu6050.h"
 #include "ssl_motor_board.h"
+#include <math.h>
 #include <stdbool.h>
 
 #define SSL_COMMAND_TIMEOUT_MS 500U
@@ -13,6 +14,7 @@ static void SSL_ConfigureTimer6(void);
 static void SSL_ChassisControlTick(void);
 static void SSL_StopAllMotors(void);
 static void SSL_UpdateWheelTargetsFromVelocity(void);
+static float SSL_DegreesToRadians(float degrees);
 static float SSL_ClampFloat(float value, float min_value, float max_value);
 static int16_t SSL_RoundToInt16(float value);
 
@@ -20,7 +22,8 @@ static const float kWheelRadiusM = 0.05f;
 static const float kHalfWheelbaseM = 0.12f;
 static const float kHalfTrackM = 0.11f;
 static const float kMaxWheelRpm = 450.0f;
-static const float kSqrt2Inv = 0.70710678f;
+static const float kPi = 3.1415926f;
+static const float kWheelAngleDeg[SSL_MOTOR_BOARD_COUNT] = {45.0f, -45.0f, 135.0f, -135.0f};
 static const int8_t kWheelDirectionSign[SSL_MOTOR_BOARD_COUNT] = {1, 1, 1, 1};
 static const SslUartPort kHostPort = {
     .instance = USART1,
@@ -277,7 +280,7 @@ static void SSL_StopAllMotors(void)
 static void SSL_UpdateWheelTargetsFromVelocity(void)
 {
   const float rotation_arm = kHalfWheelbaseM + kHalfTrackM;
-  const float wheel_rpm_per_mps = 60.0f / (2.0f * 3.1415926f * kWheelRadiusM);
+  const float wheel_rpm_per_mps = 60.0f / (2.0f * kPi * kWheelRadiusM);
   const float vx = g_target_velocity.vx_mps;
   const float vy = g_target_velocity.vy_mps;
   const float wz = g_target_velocity.wz_radps;
@@ -285,16 +288,19 @@ static void SSL_UpdateWheelTargetsFromVelocity(void)
   float max_abs_wheel_rpm = 0.0f;
   uint32_t index = 0U;
 
-  /* Four omni-wheel layout:
-   * front_left  =  45 deg
-   * rear_left   = 135 deg
-   * rear_right  = -135 deg
-   * front_right = -45 deg
+  /* Generic omni-wheel inverse kinematics:
+   * wheel_linear = cos(theta) * vx + sin(theta) * vy + wz * (L + W)
+   * theta is the wheel drive direction angle measured CCW from +vx.
    */
-  wheel_linear_mps[0] = (kSqrt2Inv * (vx + vy)) + (wz * rotation_arm);
-  wheel_linear_mps[1] = (kSqrt2Inv * (vx - vy)) + (wz * rotation_arm);
-  wheel_linear_mps[2] = (kSqrt2Inv * (-vx + vy)) + (wz * rotation_arm);
-  wheel_linear_mps[3] = (kSqrt2Inv * (-vx - vy)) + (wz * rotation_arm);
+  for (index = 0U; index < SSL_MOTOR_BOARD_COUNT; ++index)
+  {
+    const float wheel_angle_rad = SSL_DegreesToRadians(kWheelAngleDeg[index]);
+
+    wheel_linear_mps[index] =
+        (cosf(wheel_angle_rad) * vx) +
+        (sinf(wheel_angle_rad) * vy) +
+        (wz * rotation_arm);
+  }
 
   for (index = 0U; index < SSL_MOTOR_BOARD_COUNT; ++index)
   {
@@ -321,6 +327,11 @@ static void SSL_UpdateWheelTargetsFromVelocity(void)
     g_motors[index].target_rpm = SSL_RoundToInt16(
         SSL_ClampFloat(wheel_rpm, -kMaxWheelRpm, kMaxWheelRpm));
   }
+}
+
+static float SSL_DegreesToRadians(float degrees)
+{
+  return degrees * (kPi / 180.0f);
 }
 
 static float SSL_ClampFloat(float value, float min_value, float max_value)
